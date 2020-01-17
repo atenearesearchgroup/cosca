@@ -71,7 +71,7 @@ public static String executePost(String targetURL, String urlParameters) {
     String userName = myapp.getUserName();
     String temperature = Double.toString(myapp.getTemperature());
 
-    String serverURL = "https://treasure-game-uma.herokuapp.com";
+    String serverURL = "https://cosca-air-conditioning.herokuapp.com";
     String sendTemperatureURL = serverURL + "/sendTemperature";
 
     String urlParameters = URLEncoder.encode("userName", "UTF-8") + "=" + URLEncoder.encode(userName, "UTF-8") + "&" + URLEncoder.encode("temperature", "UTF-8") + "=" + URLEncoder.encode(temperature, "UTF-8");
