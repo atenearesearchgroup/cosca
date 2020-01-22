@@ -592,7 +592,7 @@ class UReal{
 	 */
 	
 	toString() {
-		return "(" + x + "," + u + ")";
+		return "(" + this.x + "," + this.u + ")";
 	}
 	
 	toInteger(){ //

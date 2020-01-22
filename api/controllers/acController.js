@@ -2,7 +2,8 @@
 
 
 var util = require('util')
-
+var UBoolean = require('../../Uncertainty/JavaScript/UBoolean');
+var UReal = require('../../Uncertainty/JavaScript/UReal');
 
 var userTemperatures = new Map();
 
@@ -10,17 +11,18 @@ var checkingInterval = process.env.CHECKING_INTERVAL || 1*20*1000
 var refreshInterval = process.env.REFRESH_INTERVAL || 1*60*1000
 
 var defaultTemp = 22.0;
-var currentTemperature = defaultTemp;
+var currentTemperature = new UReal(0.0,0.5);
+currentTemperature.setX(defaultTemp);
 
-var UBoolean = require('../../Uncertainty/JavaScript/UBoolean');
-var UReal = require('../../Uncertainty/JavaScript/UReal');
+
 
 
 function checkUserActivity(){
-    console.log("Current connected users: ");
+    
     if(userTemperatures.size == 0){
         console.log("No users are connected");
     }else{
+        console.log("Current connected users: ");
         for(var entry of userTemperatures.entries()){
             var userName = entry[0];
             var value = entry[1];
@@ -30,7 +32,7 @@ function checkUserActivity(){
         }
     }
 
-    console.log("Current temperature: " + currentTemperature);
+    console.log("Current temperature: " + currentTemperature.toString());
 
     
 }
@@ -62,27 +64,25 @@ function setTemperature(){
     if(userTemperatures.size == 0){
         //no users connected, set default temperature (or turn off)
         console.log("No users connected. Setting temperature to default: " + defaultTemp)
-        currentTemperature = defaultTemp;
+        currentTemperature.setX(defaultTemp);
     }else{
         var temperature = 0.0;
-        var uTemperature = new UReal(0.0, 0.5);
+        var uCalculatedTemperature = new UReal(0.0, 0.5);
 
         for(var entry of userTemperatures.entries()){
             var value = entry[1];
             //temperature = UReal
             //temperature.add(valor de temperatura)
             
-            uTemperature.setX(uTemperature.getX() + parseInt(value.temperature, 10));
-            temperature = temperature + parseInt(value.temperature, 10);
+            uCalculatedTemperature.setX(uCalculatedTemperature.getX() + parseFloat(value.temperature, 10));
         }
 
-        uTemperature.setX(uTemperature.getX() / userTemperatures.size);
+        uCalculatedTemperature.setX(uCalculatedTemperature.getX() / userTemperatures.size);
         //temperature.divideBy(size)
-        temperature = temperature / userTemperatures.size
-        //currentTemperature = temperature;
-        currentTemperature = uTemperature.getX();
-        console.log("Setting temperature to: " + currentTemperature) 
-        console.log("Setting temperature to: " + uTemperature.toReal() + " with uncertainty +- " + uTemperature.getU());
+        uCalculatedTemperature.setX(+uCalculatedTemperature.getX().toFixed(2))
+        currentTemperature = uCalculatedTemperature;
+        //console.log("Setting temperature to: " + currentTemperature) 
+        console.log("Setting temperature to: " + uCalculatedTemperature.toReal() + " with uncertainty +- " + uCalculatedTemperature.getU());
         //console(valor ureal +- inc (temperature.toString())) o usar ureal.toReal()
 
     }
@@ -106,9 +106,19 @@ exports.sendTemperature = function(req, res){
         setTemperature();
     }else{
         //user exists, update its seenCounter
-        userTemperatures.set(userName, {temperature, seenCounter})
-        console.log("Refreshed user " + userName + " counter");
-        response = "Refreshed user"
+
+        if(userTemperatures.get(userName).temperature == temperature){
+            //temperature didn't change
+            userTemperatures.set(userName, {temperature, seenCounter})
+            console.log("Refreshed user " + userName + " counter");
+            response = "Refreshed user"
+        }else{
+            //if temperature changed, update current temperature
+            userTemperatures.set(userName, {temperature, seenCounter})
+            console.log("Refreshed user " + userName + " counter");
+            response = "Refreshed user"
+            setTemperature()
+        }
     }
     res.send(response);
     
