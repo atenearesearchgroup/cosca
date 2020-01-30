@@ -10,8 +10,10 @@ var userTemperatures = new Map();
 var checkingInterval = process.env.CHECKING_INTERVAL || 1*20*1000
 var refreshInterval = process.env.REFRESH_INTERVAL || 1*60*1000
 
-var defaultTemp = 22.0;
-var currentTemperature = new UReal(0.0,0.5);
+var idealTemperature = 24;
+
+var defaultTemp = idealTemperature;
+var currentTemperature = new UReal(defaultTemp, 1.0);
 currentTemperature.setX(defaultTemp);
 
 
@@ -26,9 +28,9 @@ function checkUserActivity(){
         for(var entry of userTemperatures.entries()){
             var userName = entry[0];
             var value = entry[1];
-            var temperature = value.temperature;
+            var uTemperature = value.uTemperature;
             var seenCounter = value.seenCounter;
-            console.log("User: " + userName + ", temperature: " + temperature + ", seen counter: " + seenCounter)
+            console.log("User: " + userName + ", temperature: " + uTemperature.toString() + ", seen counter: " + seenCounter)
         }
     }
 
@@ -41,7 +43,7 @@ function refreshUserList(){
     for(var entry of userTemperatures.entries()){
         var userName = entry[0];
         var value = entry[1];
-        var temperature = value.temperature;
+        var uTemperature = value.uTemperature;
         var seenCounter = value.seenCounter;
         seenCounter--;
         if(seenCounter < 1){
@@ -51,8 +53,7 @@ function refreshUserList(){
             setTemperature();
         }else{
             //decrement seenCounter
-            userTemperatures.set(userName, {temperature, seenCounter})
-            
+            userTemperatures.set(userName, {uTemperature, seenCounter})
         }
     }
 
@@ -65,25 +66,43 @@ function setTemperature(){
         //no users connected, set default temperature (or turn off)
         console.log("No users connected. Setting temperature to default: " + defaultTemp)
         currentTemperature.setX(defaultTemp);
+        currentTemperature.setU(1.0);
     }else{
-        var temperature = 0.0;
-        var uCalculatedTemperature = new UReal(0.0, 0.5);
+
+        var uCalculatedTemperature = new UReal(0.0, 0.0);
+        var sumOfWeights = 0.0;
 
         for(var entry of userTemperatures.entries()){
+
+            //in case there ir only one measure, maybe add a measure of ideal temperature as reference
+            if(userTemperatures.size < 2){
+                sumOfWeights = sumOfWeights + 1
+                uCalculatedTemperature = uCalculatedTemperature.add(new UReal(idealTemperature, 0))
+
+            }
+
             var value = entry[1];
             //temperature = UReal
             //temperature.add(valor de temperatura)
+            var weight = LinearDistribution(value.uTemperature.getX())
+            var uTemperature = new UReal(value.uTemperature.getX(), value.uTemperature.getU());
+            uTemperature.setX(uTemperature.getX() * weight);
+            //calculate the weight of this measure, copy the uReal of the current measure, multiply by its weight and add it to the total sum
+            uCalculatedTemperature = uCalculatedTemperature.add(uTemperature);
             
-            uCalculatedTemperature.setX(uCalculatedTemperature.getX() + parseFloat(value.temperature, 10));
+            
+            sumOfWeights = sumOfWeights + weight; //media ponderada
+            //uCalculatedTemperature.setX(uCalculatedTemperature.getX() + parseFloat(value.temperature, 10));
         }
 
-        uCalculatedTemperature.setX(uCalculatedTemperature.getX() / userTemperatures.size);
-        //temperature.divideBy(size)
+       // uCalculatedTemperature.setX(uCalculatedTemperature.getX() / userTemperatures.size);
+        uCalculatedTemperature.setX(uCalculatedTemperature.getX() / sumOfWeights)
+        uCalculatedTemperature.setU(+uCalculatedTemperature.getU().toFixed(2)); //round to 2 decimals
+        
+        //uCalculatedTemperature.setX(uCalculatedTemperature.getX() / weights);//media ponderada
         uCalculatedTemperature.setX(+uCalculatedTemperature.getX().toFixed(2))
         currentTemperature = uCalculatedTemperature;
-        //console.log("Setting temperature to: " + currentTemperature) 
-        console.log("Setting temperature to: " + uCalculatedTemperature.toReal() + " with uncertainty +- " + uCalculatedTemperature.getU());
-        //console(valor ureal +- inc (temperature.toString())) o usar ureal.toReal()
+        console.log("Setting temperature to: " + currentTemperature.toReal() + " with uncertainty " + currentTemperature.getU());
 
     }
 }
@@ -95,29 +114,31 @@ setInterval(refreshUserList, refreshInterval)
 
 exports.sendTemperature = function(req, res){
     var userName = req.body.userName;
-    var temperature = req.body.temperature;
+    var temperature = parseFloat(req.body.temperature);
+    //var uTemperature = new UReal(temperature, LinearDistribution(temperature));
+    var uTemperature = new UReal(temperature, 0.5);
     var seenCounter = 2;
     var response;
     if(userTemperatures.get(userName) == undefined){
         //user does not exist, create new user
-        userTemperatures.set(userName, {temperature, seenCounter});
-        console.log("Added user: " + userName + " with temperature: "+ temperature); 
+        userTemperatures.set(userName, {uTemperature, seenCounter});
+        console.log("Added user: " + userName + " with temperature: "+ uTemperature.toString()); 
         response = "Added new user";
         setTemperature();
     }else{
         //user exists, update its seenCounter
 
-        if(userTemperatures.get(userName).temperature == temperature){
+        if(userTemperatures.get(userName).uTemperature == uTemperature){
             //temperature didn't change
-            userTemperatures.set(userName, {temperature, seenCounter})
+            userTemperatures.set(userName, {uTemperature, seenCounter})
             console.log("Refreshed user " + userName + " counter");
             response = "Refreshed user"
         }else{
             //if temperature changed, update current temperature
-            userTemperatures.set(userName, {temperature, seenCounter})
+            userTemperatures.set(userName, {uTemperature, seenCounter})
             console.log("Refreshed user " + userName + " counter");
             response = "Refreshed user"
-            setTemperature()
+            setTemperature();
         }
     }
     res.send(response);
@@ -136,6 +157,30 @@ exports.get_script = function (req, res) {
       });
 }
 
+
+function LinearDistribution(value){
+    var confidence = 1.0;
+    var p = 0.125 //1/8
+    var difference = Math.abs(value - idealTemperature);
+
+
+    /**
+     * inverse distance weighting
+     * 
+          confidence = ________1________
+                        distance ^ 1/6
+            
+     */
+
+     if(difference <1){
+         confidence = 1
+     }else{
+                        
+        confidence = 1/(Math.pow(difference,p));
+        
+     }
+    return +confidence.toFixed(2)
+}
 /*
 
 var miUreal = new UReal(0.0, 0.0);
