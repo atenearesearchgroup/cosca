@@ -5,7 +5,7 @@ import java.util.HashMap;
 
 /**** Header region */
 //interval in which to execute again (in minutes)
-//header:interval=02
+//header:interval=01
 
 
 /**** Functions region *****/

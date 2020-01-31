@@ -74,7 +74,7 @@ function setTemperature(){
 
         for(var entry of userTemperatures.entries()){
 
-            //in case there ir only one measure, maybe add a measure of ideal temperature as reference
+            //in case there ir only one measure, add a measure of ideal temperature as reference
             if(userTemperatures.size < 2){
                 sumOfWeights = sumOfWeights + 1
                 uCalculatedTemperature = uCalculatedTemperature.add(new UReal(idealTemperature, 0))
@@ -82,24 +82,19 @@ function setTemperature(){
             }
 
             var value = entry[1];
-            //temperature = UReal
-            //temperature.add(valor de temperatura)
-            var weight = LinearDistribution(value.uTemperature.getX())
+            var weight = ProbabilityDistribution(value.uTemperature.getX())
             var uTemperature = new UReal(value.uTemperature.getX(), value.uTemperature.getU());
             uTemperature.setX(uTemperature.getX() * weight);
             //calculate the weight of this measure, copy the uReal of the current measure, multiply by its weight and add it to the total sum
             uCalculatedTemperature = uCalculatedTemperature.add(uTemperature);
             
             
-            sumOfWeights = sumOfWeights + weight; //media ponderada
-            //uCalculatedTemperature.setX(uCalculatedTemperature.getX() + parseFloat(value.temperature, 10));
+            sumOfWeights = sumOfWeights + weight; //weighted average
         }
 
-       // uCalculatedTemperature.setX(uCalculatedTemperature.getX() / userTemperatures.size);
         uCalculatedTemperature.setX(uCalculatedTemperature.getX() / sumOfWeights)
         uCalculatedTemperature.setU(+uCalculatedTemperature.getU().toFixed(2)); //round to 2 decimals
         
-        //uCalculatedTemperature.setX(uCalculatedTemperature.getX() / weights);//media ponderada
         uCalculatedTemperature.setX(+uCalculatedTemperature.getX().toFixed(2))
         currentTemperature = uCalculatedTemperature;
         console.log("Setting temperature to: " + currentTemperature.toReal() + " with uncertainty " + currentTemperature.getU());
@@ -110,15 +105,15 @@ function setTemperature(){
 //execute this function periodically
 setInterval(checkUserActivity, checkingInterval);
 setInterval(refreshUserList, refreshInterval)
-//setInterval(setTemperature, setTemperatureInterval)
+
 
 exports.sendTemperature = function(req, res){
     var userName = req.body.userName;
     var temperature = parseFloat(req.body.temperature);
-    //var uTemperature = new UReal(temperature, LinearDistribution(temperature));
     var uTemperature = new UReal(temperature, 0.5);
     var seenCounter = 2;
     var response;
+
     if(userTemperatures.get(userName) == undefined){
         //user does not exist, create new user
         userTemperatures.set(userName, {uTemperature, seenCounter});
@@ -158,7 +153,7 @@ exports.get_script = function (req, res) {
 }
 
 
-function LinearDistribution(value){
+function ProbabilityDistribution(value){
     var confidence = 1.0;
     var p = 0.125 //1/8
     var difference = Math.abs(value - idealTemperature);
@@ -168,36 +163,16 @@ function LinearDistribution(value){
      * inverse distance weighting
      * 
           confidence = ________1________
-                        distance ^ 1/6
+                        distance ^ 1/8
             
-     */
+    */
 
-     if(difference <1){
-         confidence = 1
-     }else{
-                        
-        confidence = 1/(Math.pow(difference,p));
-        
-     }
+    if(difference <1){
+        confidence = 1
+    }else{
+                    
+    confidence = 1/(Math.pow(difference,p));
+    
+    }
     return +confidence.toFixed(2)
 }
-/*
-
-var miUreal = new UReal(0.0, 0.0);
-
-/*
-console.log(miUreal.getX());
-console.log(miUreal.setX(24.3));
-console.log(miUreal.getX());
-
-var x = new UReal(1.0, 0.0);
-var y = new UReal(3.0, 0.0);
-console.log(x.add(y));
-console.log(x.minus(y));
-
-
-var miUBoolean = new UBoolean();
-
-console.log(miUBoolean.getB());
-console.log(miUBoolean.getC());
-*/
